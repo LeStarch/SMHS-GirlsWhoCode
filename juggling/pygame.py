@@ -1,26 +1,37 @@
+
 import pygame
+from .utilities import CellType
+
+from random import randint
 
 # Basic constants
-SCREEN = (800, 600)
+SCREEN = (1900, 1080)
 COLORS = {
     "white": (255, 255, 255),
-    "black": (0, 0, 0)
+    "black": (0, 0, 0),
+    CellType.WALL: (120, 50, 0),
+    CellType.PATH: (0, 0, 0),
+    CellType.EXIT: (0, 255, 0)
 }
 FPS = 60
-
 # Images
 SHIP_IMAGE = pygame.image.load("Related/spaceship_red.png")
 SHIP_IMAGE = pygame.transform.rotate(pygame.transform.scale(SHIP_IMAGE, (100, 100)), 90)
 
+FONT, FONT_END = None, None
 
 # Global variables
 RUN = True
 
 
-def setup():
+def setup(caption="You Forgot to Set A Caption, Michael..."):
     """ Sets up pygame's display etc. """
-    pygame.display.set_caption("Part 1: Something 1")
-    return pygame.display.set_mode(SCREEN), pygame.time.Clock()
+    global FONT, FONT_END
+    pygame.init()
+    FONT = pygame.font.SysFont("ariel.ttf", 32)
+    FONT_END = pygame.font.SysFont("ariel.ttf", 256)
+    pygame.display.set_caption(caption)
+    return pygame.display.set_mode((1400, 900), pygame.RESIZABLE), pygame.time.Clock()
 
 
 def events():
@@ -41,5 +52,17 @@ def draw(window, *items):
     """
     window.fill(COLORS["black"])
     for item in items:
-        window.blit(item.get("image"), item.get("position"))
+        item.draw(window)
     pygame.display.update()
+
+
+def main(move, *items):
+    """ Main program """
+    window, clock = setup()
+
+    while RUN:
+        move()
+        draw(window, *items)
+        events()
+        clock.tick(FPS)
+    pygame.quit()

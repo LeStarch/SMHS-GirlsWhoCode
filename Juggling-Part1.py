@@ -1,53 +1,51 @@
-import copy
-import pygame
-import juggling.pygame
+""" lesson 1: cooperative parallelism
 
-BASE_DATA = {
-    "ready": True,
-    "position": (0, 0),
-    "image": juggling.pygame.SHIP_IMAGE,
-    "function": lambda data: None
-}
-SHIP_DATA_1 = copy.copy(BASE_DATA)
-SHIP_DATA_2 = copy.copy(BASE_DATA)
+This will establish the basis for the multi-threading lesson. This particular lesson will show what the world is like
+before threads.  Students should inspect the "move" function to understand what it does. Then students should inspect
+the "ship1" and "ship2" functions that are called from "move".
+"""
+import time
+
+from juggling.data import Ship
+from juggling.pygame import main
 
 
-def ship1(data):
+def ship1(ship):
     """ Control function for ship 1 """
-    pass
+    # Update ship one: sleep 100ms and then move
+    time.sleep(0.100)
+    # Read ship position into x, y and then update the position to x + 1, y
+    x, y = ship.position
+    ship.position = x + 1, y
 
 
-def ship2(data):
+def ship2(ship):
     """ Control function for ship 2 """
-    pass
+    x, y = ship.position
+    ship.position = x + 1, y
 
 
-SHIP_DATA_1["position"] = (0, 100)
-SHIP_DATA_2["position"] = (0, 300)
-SHIP_DATA_1["function"] = ship1
-SHIP_DATA_2["function"] = ship2
+# Create two ships as global variables. Why use evil globals? It's EASY!
+SHIP_1 = Ship(100)
+SHIP_2 = Ship(300)
 
 
-def run(data):
-    """ Runs the function with the data, if ready """
-    if data["ready"]:
-        data["function"](data)
+def move():
+    """ Move the ships using two functions
 
+    This version of move is a form of cooperative multithreading. In essence, function writes agree that each call to
+    their function does a small (one)  unit of work. Calling the functions in an interleaving fashion virtualizes
+    multiple programs operating at once. This does imply:
 
-def main():
-    """ Main program """
-    window, clock = juggling.pygame.setup()
+    1. Function implementors must behave, don't do long amounts of work in the function (sleeps, big calculations)
+    2. Functions still affect one another, however; in this case the code is separated
+    3. Our "ship1" function is poorly behaved (it sleeps) and delays ship2 still
 
-    while juggling.pygame.RUN:
-        run(SHIP_DATA_1)
-        run(SHIP_DATA_2)
-
-        juggling.pygame.draw(window, SHIP_DATA_1, SHIP_DATA_2)
-        juggling.pygame.events()
-        clock.tick(juggling.pygame.FPS)
-
-    pygame.quit()
+    CHALLENGE: can you fix ship1 to be slow while keeping ship2 fast? Hint: time.time() gets the current time.
+    """
+    ship1(SHIP_1)
+    ship2(SHIP_2)
 
 
 if __name__ == "__main__":
-    main()
+    main(move, SHIP_1, SHIP_2)
