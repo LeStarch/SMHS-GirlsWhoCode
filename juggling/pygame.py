@@ -13,6 +13,13 @@ COLORS = {
     CellType.PATH: (0, 0, 0),
     CellType.EXIT: (0, 255, 0)
 }
+IMAGES = {
+    CellType.WALL: pygame.image.load("Related/wall.png"),
+    CellType.PATH: pygame.image.load("Related/path.png"),
+    CellType.EXIT: pygame.image.load("Related/exit.png")
+}
+
+
 FPS = 60
 # Images
 SHIP_IMAGE = pygame.image.load("Related/spaceship_red.png")
@@ -50,7 +57,7 @@ def draw(window, *items):
     :param window: window to draw the scene into
     :param items: any number of data items used to draw ships
     """
-    window.fill(COLORS["black"])
+    #window.fill(COLORS["black"])
     for item in items:
         item.draw(window)
     pygame.display.update()

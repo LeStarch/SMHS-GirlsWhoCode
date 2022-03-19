@@ -52,24 +52,24 @@ class Cell(object):
     def __repr__(self):
         return f"({self.x},{self.y}) {self.type.name}"
 
-    def draw(self, window, cell_size, color=None, debug=False):
+    def draw(self, window, cell_size, debug=False):
         """ """
         cell_type = self.type
-        color = juggling.pygame.COLORS[cell_type] if color is None else color
-
-        rect = pygame.Rect((self.x + 1) * cell_size, (self.y + 1) * cell_size,
-                           cell_size, cell_size)
-        # Fill
-        pygame.draw.rect(window, color, rect)
-
+        drawable = juggling.pygame.IMAGES.get(cell_type, juggling.pygame.COLORS.get(cell_type, (255, 255, 255)))
+        rect = pygame.Rect((self.x + 1) * cell_size, (self.y + 1) * cell_size, cell_size, cell_size)
+        # Draw the base cell, with a color or an image
+        if isinstance(drawable, tuple) and len(drawable) == 3:
+            pygame.draw.rect(window, drawable, rect)
+        elif isinstance(drawable, pygame.surface.Surface):
+            drawable = pygame.transform.scale(drawable, (cell_size, cell_size))
+            window.blit(drawable, ((self.x + 1) * cell_size, (self.y + 1) * cell_size))
         attr = getattr(self, "score", None)
         if attr is not None and debug:
             text = juggling.pygame.FONT.render(str(attr), True, juggling.pygame.COLORS["white"],
                                                juggling.pygame.COLORS["black"])
             window.blit(text, ((self.x + 1) * cell_size, (self.y + 1) * cell_size))
-
         # Border
-        pygame.draw.rect(window, juggling.pygame.COLORS["white"], rect, 2)
+        #pygame.draw.rect(window, juggling.pygame.COLORS["white"], rect, 2)
 
 
 class Player(object):
@@ -133,10 +133,11 @@ class Player(object):
     def unblock(self):
         self.waiting.set()
 
-    def draw(self, window, cell_size):
+    def draw(self, window, cell_size, image_size=None):
         """ Draw a player """
         x, y = self.x, self.y
-        window.blit(self.get_scaled_image(cell_size), ((x + 1) * cell_size, (y + 1) * cell_size))
+        window.blit(self.get_scaled_image(cell_size if image_size is None else image_size),
+                    ((x + 1) * cell_size, (y + 1) * cell_size))
 
     @staticmethod
     def collided(item1, item2):
@@ -282,11 +283,35 @@ class Maze(object):
                 self[coord].type = CellType.WALL
 
 
+class CheatDetector(object):
+    """ Detects cheats the player might try """
+
+    def __init__(self, player, maze):
+        """ Detects cheats, with magic """
+        self.exit_copy = copy.deepcopy(maze.exit)
+        self.last = (0, 0)
+        self.max_movement = 0
+
+    def update(self, player, ai_players):
+        """ Update from ai and plauers """
+        change = abs(player.x - self.last[0]) + abs(player.y - self.last[1])
+        self.max_movement = max(self.max_movement, change)
+        self.last = player.x, player.y
+
+    def cheated(self, game):
+        """ Crudely detect cheates """
+        if game.maze.exit != self.exit_copy:
+            return True
+        elif self.max_movement >= 2:
+            return True
+        return False
+
+
 class Game(object):
     """ Create the GAME in all its glory """
     def __init__(self, difficulty: Difficulty, player, turn_time=500):
-        self.won = False
         self.gameover = threading.Event()
+        self.gameover_counter = None
         self.maze = FloodFill.cache(Maze(12, 12), False)
         self.last = None
         self.turn_time = turn_time
@@ -294,6 +319,8 @@ class Game(object):
         self.ai_player = AiPlayer(difficulty)
         for player in self.players():
             player.set_game(self)
+        self.cheater = CheatDetector(self.player, self.maze)
+        self.cheater.update(player, self.ai_player)
 
     def players(self):
         """ Returns list of players """
@@ -334,12 +361,12 @@ class Game(object):
         for player in self.players():
             player.update()
             if Player.collided(self.player, self.maze.exit):
-                self.won = True
                 self.gameover.set()
                 break
             if Player.collided(self.player, self.ai_player):
                 self.gameover.set()
                 break
+        self.cheater.update(self.player, self.ai_player)
         for player in self.players():
             player.unblock()
 
@@ -354,18 +381,41 @@ class Game(object):
 
     def draw(self, window):
         """ Draw the maze """
+        # Draw maze if no winners
+        if not self.gameover.is_set():
+            self.draw_maze(window)
+        # Check and draw winners no more .won flag as it inspired cheating
+        elif self.gameover.is_set() and Player.collided(self.player, self.maze.exit) and not self.cheater.cheated(self):
+            self.draw_game_over("You Won!!!", self.player, window)
+        elif self.gameover.is_set() and Player.collided(self.player, self.ai_player):
+            self.draw_game_over("You Lost!!!", self.ai_player, window)
+        else:
+            self.draw_cheater(window)
+
+    def draw_maze(self, window):
+        """ Maze drawing """
         window.fill(juggling.pygame.COLORS["black"])
         cell_size = self.get_cell_size(window)
-        for cell in self.maze:
-            cell.draw(window, cell_size)
-        for player in self.players():
-            player.draw(window, cell_size)
+        # Draw all players
+        [cell.draw(window, cell_size) for cell in self.maze]
+        [player.draw(window, cell_size) for player in self.players()]
 
-        if self.gameover.is_set() and self.won:
-            text = juggling.pygame.FONT_END.render("You WON!!!!", True, juggling.pygame.COLORS["white"],
-                                                   juggling.pygame.COLORS["black"])
-            window.blit(text, (300, 300))
-        elif self.gameover.is_set():
-            text = juggling.pygame.FONT_END.render("You LOST!!!!", True, juggling.pygame.COLORS["white"],
-                                                   juggling.pygame.COLORS["black"])
-            window.blit(text, (300, 300))
+    def draw_cheater(self, window):
+        """ Cheater? """
+        self.gameover_counter = (0 if self.gameover_counter is None else self.gameover_counter) + 1
+        if (self.gameover_counter % 10) != 0:
+            return
+        x, y = window.get_size()
+        text = juggling.pygame.FONT_END.render("Cheater?", True, juggling.pygame.COLORS["white"],
+                                               juggling.pygame.COLORS["black"])
+        window.blit(text, (randint(0, x), randint(0, y)))
+
+    def draw_game_over(self, text, winner, window):
+        """ Draws the game over scene """
+        cell_size = self.get_cell_size(window)
+        window.fill(juggling.pygame.COLORS["black"])
+        self.gameover_counter = (self.gameover_counter if self.gameover_counter is not None else cell_size) + 1
+        winner.draw(window, cell_size, self.gameover_counter)
+        text = juggling.pygame.FONT_END.render(text, True, juggling.pygame.COLORS["white"],
+                                               juggling.pygame.COLORS["black"])
+        window.blit(text, (300, 300))
